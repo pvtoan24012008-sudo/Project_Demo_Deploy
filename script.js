@@ -1,0 +1,276 @@
+// Dán link Worker AI vào đây (xem file worker.js). Để trống thì phần Hỏi AI chỉ tìm trong thư viện có sẵn.
+const AI_ENDPOINT='';
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ld=(k,d)=>{try{const v=localStorage.getItem('gym_'+k);return v?JSON.parse(v):d}catch(e){return d}};
+const sv=(k,v)=>{try{localStorage.setItem('gym_'+k,JSON.stringify(v))}catch(e){}};
+const vnd=n=>Number(n).toLocaleString('vi-VN')+'đ';
+const GOALS=[['fat','🔥 Giảm mỡ'],['muscle','💪 Tăng cơ'],['keep','⚖️ Giữ dáng']];
+
+let gyms=ld('gyms',[
+{n:'Fit Station Cầu Giấy',a:'12 Trần Thái Tông, Cầu Giấy',d:'Cầu Giấy',p:350000,r:4.6,h:'5:30–22:30',t:['Máy cardio','Tạ tự do','Phòng tắm']},
+{n:'Iron Bay Đống Đa',a:'45 Chùa Bộc, Đống Đa',d:'Đống Đa',p:480000,r:4.4,h:'6:00–22:00',t:['Tạ tự do','PT riêng','Gửi xe']},
+{n:'Zen Fitness Tây Hồ',a:'88 Xuân Diệu, Tây Hồ',d:'Tây Hồ',p:900000,r:4.8,h:'5:00–23:00',t:['Yoga','Hồ bơi','Sauna','PT riêng']},
+{n:'Gym Nhà Mình',a:'7 Nguyễn Trãi, Thanh Xuân',d:'Thanh Xuân',p:250000,r:4.1,h:'6:00–21:00',t:['Máy cardio','Giá rẻ']},
+{n:'Power House Hai Bà Trưng',a:'101 Bạch Mai, Hai Bà Trưng',d:'Hai Bà Trưng',p:650000,r:4.5,h:'5:30–22:30',t:['Boxing','Tạ tự do','Phòng tắm']},
+{n:'Elite Club Hoàn Kiếm',a:'20 Tràng Tiền, Hoàn Kiếm',d:'Hoàn Kiếm',p:1400000,r:4.9,h:'24/7',t:['Hồ bơi','Sauna','Yoga','PT riêng','Khăn tắm']}]);
+let favs=ld('favs',[]),goal=ld('goal','fat'),favOnly=false;
+const W0={fat:[{t:'Buổi A: Cardio và toàn thân',d:'50 phút',e:['Khởi động 5 phút','Chạy bộ 20 phút','Squat 3x15','Đẩy ngực tạ đơn 3x12','Plank 3x40 giây']},{t:'Buổi B: HIIT',d:'30 phút',e:['Burpee 30 giây, nghỉ 30 giây x8','Nhảy dây 3x2 phút','Gập bụng 3x20']}],
+muscle:[{t:'Ngày đẩy: ngực, vai, tay sau',d:'60 phút',e:['Bench press 4x8','Đẩy vai tạ đơn 3x10','Dips 3x10','Tay sau cáp 3x12']},{t:'Ngày kéo: lưng, tay trước',d:'60 phút',e:['Deadlift 4x6','Kéo xà 3x8','Kéo cáp ngồi 3x10','Cuốn tạ đơn 3x12']},{t:'Ngày chân',d:'65 phút',e:['Squat 4x8','Romanian deadlift 3x10','Leg press 3x12','Nâng bắp chân 4x15']}],
+keep:[{t:'Buổi toàn thân nhẹ',d:'45 phút',e:['Đạp xe 10 phút','Squat 3x12','Đẩy tạ đơn 3x12','Kéo cáp 3x12','Plank 3x30 giây']},{t:'Yoga và giãn cơ',d:'40 phút',e:['Chào mặt trời 5 vòng','Giãn lưng và hông 10 phút','Thở sâu 5 phút']}]};
+const M0={fat:[{t:'Bữa sáng',k:350,p:25,f:['2 trứng luộc','1 lát bánh mì nguyên cám','1 quả chuối']},{t:'Bữa trưa',k:500,p:40,f:['150g ức gà áp chảo','Cơm gạo lứt 1 chén','Rau luộc, canh rau']},{t:'Bữa tối',k:400,p:35,f:['150g cá hấp','Salad rau xanh','Khoai lang 100g']}],
+muscle:[{t:'Bữa sáng',k:650,p:40,f:['3 trứng + yến mạch 60g','1 ly sữa','1 quả chuối']},{t:'Bữa trưa',k:800,p:55,f:['200g thịt bò nạc','Cơm trắng 2 chén','Rau xào']},{t:'Sau tập',k:350,p:30,f:['1 scoop whey hoặc 2 hộp sữa chua Hy Lạp','Bánh mì lát']},{t:'Bữa tối',k:700,p:50,f:['200g cá hồi hoặc gà','Khoai lang 150g','Súp lơ xanh']}],
+keep:[{t:'Bữa sáng',k:450,p:25,f:['Phở gà hoặc bún nhỏ','1 quả trứng']},{t:'Bữa trưa',k:600,p:35,f:['Cơm 1,5 chén','Thịt nạc hoặc đậu phụ','Rau và canh']},{t:'Bữa tối',k:500,p:30,f:['Cá hoặc tôm','Rau xanh','Cơm 1 chén']}]};
+let wk=ld('wk',W0),ml=ld('ml',M0);
+
+// Tabs
+function tab(id){$$('nav button').forEach(b=>b.setAttribute('aria-selected',b.dataset.tab===id));$$('main>section').forEach(s=>s.hidden=s.id!==id)}
+$$('nav button').forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+
+// Goals
+function drawGoals(){$$('[data-goals]').forEach(g=>{g.innerHTML=GOALS.map(([k,l])=>`<button aria-pressed="${k===goal}" data-g="${k}">${l}</button>`).join('');g.querySelectorAll('button').forEach(b=>b.onclick=()=>{goal=b.dataset.g;sv('goal',goal);drawGoals();drawWk();drawMl()})})}
+
+// Gyms
+const GR=['#2a45e8,#7f93ff','#ff5a36,#ffb199','#1d7a4d,#6fd3a0','#7a3fe0,#c3a1ff','#0b8a9e,#7fdcea','#c2410c,#fdba74'];
+let pop=null;
+const emo=g=>g.t.includes('Hồ bơi')?'🏊':g.t.includes('Yoga')?'🧘':g.t.includes('Boxing')?'🥊':'🏋️';
+function drawGyms(){
+  const q=$('#q').value.trim().toLowerCase(),d=$('#dist').value,mx=+$('#maxp').value,s=$('#sort').value;
+  $('#maxv').textContent=vnd(mx);
+  let L=gyms.map((g,i)=>({...g,i})).filter(g=>(!q||(g.n+' '+g.a).toLowerCase().includes(q))&&(!d||g.d===d)&&g.p<=mx&&(!favOnly||favs.includes(g.n)));
+  L.sort(s==='p'?(a,b)=>(a.p||1e12)-(b.p||1e12):s==='r'?(a,b)=>b.r-a.r:(a,b)=>a.n.localeCompare(b.n,'vi'));
+  $('#count').textContent=L.length+' phòng gym';
+  $('#gymList').innerHTML=L.length?L.map((g,n)=>`<article class="card" style="--i:${Math.min(n,8)}"><div class="ban" style="background:linear-gradient(120deg,${GR[g.i%6].split(',')[0]},${GR[g.i%6].split(',')[1]})"><span aria-hidden="true">${emo(g)}</span><em>★ ${g.r}</em></div><div class="cb"><h3>${esc(g.n)}</h3><div class="mut">📍 ${esc(g.a)}<br>🕒 ${esc(g.h)}</div><div class="price">${g.p?vnd(g.p)+" <small>/ tháng</small>":"Liên hệ báo giá"}</div><div class="tags">${g.t.map(t=>`<span class="tag">${esc(t)}</span>`).join('')}</div><div class="row"><button class="btn${g.n===pop?' pop':''}" data-f="${g.i}" aria-pressed="${favs.includes(g.n)}">${favs.includes(g.n)?'♥ Đã lưu':'♡ Yêu thích'}</button><a class="btn p" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.n+' '+g.a)}">Xem bản đồ</a><button class="btn" data-x="${g.i}" aria-label="Xóa ${esc(g.n)}">Xóa</button></div></div></article>`).join(''):'<p class="empty">Không có phòng nào phù hợp. Hãy tăng giá tối đa hoặc chọn quận khác.</p>';
+  $$('[data-f]').forEach(b=>b.onclick=()=>{const n=gyms[b.dataset.f].n;favs=favs.includes(n)?favs.filter(x=>x!==n):[...favs,n];pop=n;sv('favs',favs);drawGyms();drawStats();pop=null});
+  $$('[data-x]').forEach(b=>b.onclick=()=>{if(confirm('Xóa phòng gym này?')){gyms.splice(+b.dataset.x,1);sv('gyms',gyms);drawAll()}});
+}
+function drawDist(){const cur=$('#dist').value;$('#dist').innerHTML='<option value="">Tất cả</option>'+[...new Set(gyms.map(g=>g.d))].sort((a,b)=>a.localeCompare(b,'vi')).map(d=>`<option>${esc(d)}</option>`).join('');$('#dist').value=cur}
+function drawStats(){const ps=gyms.map(g=>g.p).filter(Boolean),v=[[gyms.length,'phòng gym',String],[ps.length?Math.min(...ps):0,'giá thấp nhất',vnd],[favs.length,'yêu thích',String]];
+  $('#stats').innerHTML=v.map(x=>`<span><b>${x[2](x[0])}</b>${x[1]}</span>`).join('');
+  $$('#stats b').forEach((b,i)=>{const [to,,f]=v[i];let t0=null;const st=ts=>{t0=t0||ts;const k=Math.min(1,(ts-t0)/700);b.textContent=f(Math.round(to*(1-Math.pow(1-k,3))));if(k<1)requestAnimationFrame(st)};requestAnimationFrame(st)})}
+function drawAll(){drawDist();drawGyms();drawStats()}
+['q','dist','maxp','sort'].forEach(i=>$('#'+i).oninput=drawGyms);
+$('#favOnly').onclick=e=>{favOnly=!favOnly;e.target.setAttribute('aria-pressed',favOnly);drawGyms()};
+
+// Workouts
+function drawWk(){const L=wk[goal]||[];$('#wk').innerHTML=L.length?L.map((w,i)=>`<div class="item" style="--i:${i}"><button class="x" data-dw="${i}" aria-label="Xóa buổi tập">×</button><h3>${esc(w.t)}</h3><div class="chips"><span>⏱ ${esc(w.d)}</span></div><ol>${w.e.map(e=>`<li>${esc(e)}</li>`).join('')}</ol></div>`).join(''):'<p class="empty">Chưa có buổi tập. Hãy thêm buổi đầu tiên.</p>';
+  $$('[data-dw]').forEach(b=>b.onclick=()=>{wk[goal].splice(+b.dataset.dw,1);sv('wk',wk);drawWk()})}
+// Meals
+function drawMl(){const L=ml[goal]||[],k=L.reduce((a,m)=>a+m.k,0),p=L.reduce((a,m)=>a+m.p,0),T=ld('target',2000);
+  $('#sum').innerHTML=`<b>${k} kcal</b> · ${p}g đạm trong thực đơn · mục tiêu ${T} kcal<div class="meter"><i style="width:${Math.min(100,k/T*100)}%"></i></div>`;
+  $('#ml').innerHTML=L.length?L.map((m,i)=>`<div class="item meal" style="--i:${i}"><button class="x" data-dm="${i}" aria-label="Xóa bữa ăn">×</button><h3>${esc(m.t)}</h3><div class="chips"><span>🔥 ${m.k} kcal</span><span>🥩 ${m.p}g đạm</span></div><ul>${m.f.map(e=>`<li>${esc(e)}</li>`).join('')}</ul></div>`).join(''):'<p class="empty">Chưa có bữa ăn. Hãy thêm bữa đầu tiên.</p>';
+  $$('[data-dm]').forEach(b=>b.onclick=()=>{ml[goal].splice(+b.dataset.dm,1);sv('ml',ml);drawMl()})}
+// Water
+function drawWater(){let w=ld('water',{});const t=new Date().toDateString();if(w.d!==t)w={d:t,n:0};
+  $('#cups').innerHTML=Array.from({length:8},(_,i)=>`<button aria-label="Ly ${i+1}" aria-pressed="${i<w.n}" data-c="${i+1}" style="--i:${i}"></button>`).join('');
+  $('#wl').textContent=w.n+'/8 ly';
+  $$('[data-c]').forEach(b=>b.onclick=()=>{const v=+b.dataset.c;w.n=w.n===v?v-1:v;sv('water',w);drawWater();if(w.n===8)celebrate()})}
+// Timer
+let tI;$$('[data-t]').forEach(b=>b.onclick=()=>{clearInterval(tI);$('.timer').classList.add('on');let s=+b.dataset.t;const sh=()=>$('#tm').textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0');sh();tI=setInterval(()=>{s--;sh();if(s<=0){clearInterval(tI);$('.timer').classList.remove('on');$('#tm').textContent='Tập tiếp!';try{navigator.vibrate&&navigator.vibrate(300)}catch(e){}}},1000)});
+// Calculator
+$('#calc').onclick=()=>{const m=$('#c-sex').value==='m',a=+$('#c-age').value,h=+$('#c-h').value,w=+$('#c-w').value,act=+$('#c-act').value;
+  if(!(a>0&&h>0&&w>0)){$('#res').innerHTML='<p class="mut">Hãy nhập đủ tuổi, chiều cao và cân nặng.</p>';return}
+  const bmi=w/((h/100)**2),cat=bmi<18.5?'Thiếu cân':bmi<23?'Bình thường':bmi<25?'Thừa cân':'Béo phì';
+  const tdee=(10*w+6.25*h-5*a+(m?5:-161))*act,tg=Math.round(tdee*(goal==='fat'?.85:goal==='muscle'?1.1:1)/10)*10;
+  sv('target',tg);
+  $('#res').innerHTML=`<div class="big"><b>${bmi.toFixed(1)}</b>BMI · ${cat}</div><div class="big"><b>${Math.round(tdee)}</b>kcal duy trì mỗi ngày</div><div class="big"><b>${tg}</b>kcal mục tiêu</div><div class="big"><b>${Math.round(w*(goal==='muscle'?2:1.6))}g</b>đạm mỗi ngày</div><div class="big w"><b>${(w*.035).toFixed(1)} lít</b>nước nên uống mỗi ngày</div><p class="mut">Phân loại BMI theo chuẩn châu Á. Công thức Mifflin-St Jeor, mang tính tham khảo.</p>`;drawMl()};
+
+// Dialog
+function form(title,fields,save){$('#frm').innerHTML=`<h2>${title}</h2>`+fields.map(f=>`<div class="f"><label for="d-${f[0]}">${f[1]}</label>${f[2]==='area'?`<textarea id="d-${f[0]}" rows="4" required></textarea>`:`<input id="d-${f[0]}" type="${f[2]}" required>`}</div>`).join('')+'<div class="row"><button class="btn p" type="submit">Lưu</button><button class="btn" type="button" id="cx">Hủy</button></div>';
+  $('#cx').onclick=()=>$('#dlg').close();$('#frm').onsubmit=e=>{e.preventDefault();save(k=>$('#d-'+k).value.trim());$('#dlg').close()};$('#dlg').showModal()}
+const lines=v=>v.split('\n').map(x=>x.trim()).filter(Boolean);
+$('#addGym').onclick=()=>form('Thêm phòng gym',[['n','Tên phòng gym','text'],['a','Địa chỉ','text'],['d','Quận','text'],['p','Giá mỗi tháng (đồng)','number'],['t','Tiện ích, cách nhau bằng dấu phẩy','text']],v=>{gyms.push({n:v('n'),a:v('a'),d:v('d'),p:+v('p'),r:4.0,h:'Chưa cập nhật',t:v('t').split(',').map(x=>x.trim()).filter(Boolean)});sv('gyms',gyms);drawAll()});
+$('#addWk').onclick=()=>form('Thêm buổi tập',[['t','Tên buổi tập','text'],['d','Thời lượng (ví dụ 45 phút)','text'],['e','Các bài tập, mỗi dòng một bài','area']],v=>{(wk[goal]=wk[goal]||[]).push({t:v('t'),d:v('d'),e:lines(v('e'))});sv('wk',wk);drawWk()});
+$('#addMl').onclick=()=>form('Thêm bữa ăn',[['t','Tên bữa ăn','text'],['k','Calo (kcal)','number'],['p','Đạm (g)','number'],['f','Món ăn, mỗi dòng một món','area']],v=>{(ml[goal]=ml[goal]||[]).push({t:v('t'),k:+v('k'),p:+v('p'),f:lines(v('f'))});sv('ml',ml);drawMl()});
+
+// Theme
+{const t=ld('theme',null);if(t)document.documentElement.dataset.theme=t}
+$('#theme').onclick=()=>{const d=document.documentElement,cur=d.dataset.theme||(matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'),n=cur==='dark'?'light':'dark';d.dataset.theme=n;sv('theme',n)};
+// Confetti
+function celebrate(){const c=document.createElement('div');c.className='conf';c.setAttribute('aria-hidden','true');c.innerHTML=Array.from({length:28},(_,i)=>`<i style="left:${Math.random()*100}%;--d:${(Math.random()*.6).toFixed(2)}s;--r:${Math.round(Math.random()*720-360)}deg">${['🎉','⭐','💪','🔥','✨'][i%5]}</i>`).join('');document.body.appendChild(c);setTimeout(()=>c.remove(),2800)}
+// Weekly plan
+const DAYS=['Thứ 2','Thứ 3','Thứ 4','Thứ 5','Thứ 6','Thứ 7','Chủ nhật'],KINDS=['Nghỉ','Ngực, vai, tay sau','Lưng, tay trước','Chân','Cardio','Yoga','Toàn thân'],KE=['😴','💪','🧗','🦵','🏃','🧘','🏋️'];
+let plan=ld('plan',[1,2,0,3,4,5,0].map(k=>({k,x:false})));
+function drawPlan(){const act=plan.filter(p=>p.k>0),dn=act.filter(p=>p.x).length,pc=act.length?Math.round(dn/act.length*100):0;
+  $('#pl-sum').innerHTML=`<b>${dn}/${act.length} buổi đã hoàn thành tuần này</b><div class="meter"><i style="width:${pc}%"></i></div>`;
+  $('#days').innerHTML=DAYS.map((d,i)=>{const p=plan[i];return `<div class="day${p.x?' done':''}${p.k?'':' rest'}" style="--i:${i}"><h3>${d}</h3><div class="de" aria-hidden="true">${p.x?'✅':KE[p.k]}</div><select data-k="${i}" aria-label="Bài tập ${d}">${KINDS.map((k,n)=>`<option value="${n}"${n===p.k?' selected':''}>${k}</option>`).join('')}</select>${p.k?`<button class="btn" data-x2="${i}" aria-pressed="${p.x}">${p.x?'Đã tập':'Đánh dấu đã tập'}</button>`:'<span class="mut">Nghỉ ngơi</span>'}</div>`}).join('');
+  $$('[data-k]').forEach(s=>s.onchange=()=>{plan[+s.dataset.k]={k:+s.value,x:false};sv('plan',plan);drawPlan()});
+  $$('[data-x2]').forEach(b=>b.onclick=()=>{const p=plan[+b.dataset.x2];p.x=!p.x;sv('plan',plan);drawPlan();if(p.x&&plan.filter(q=>q.k>0).every(q=>q.x))celebrate()})}
+$('#newWeek').onclick=()=>{plan.forEach(p=>p.x=false);sv('plan',plan);drawPlan()};
+// Progress
+let wlog=ld('wlog',[]);
+function drawProg(){const L=[...wlog].sort((a,b)=>a.d.localeCompare(b.d)),z=L.slice(-12);
+  if(z.length<2)$('#chart').innerHTML='<p class="mut">Nhập ít nhất 2 lần cân để xem biểu đồ.</p>';
+  else{const ws=z.map(x=>x.w),mn=Math.min(...ws)-1,mx=Math.max(...ws)+1,X=i=>24+i*(256/(z.length-1)),Y=w=>100-(w-mn)/(mx-mn)*80;
+    $('#chart').innerHTML=`<svg viewBox="0 0 300 120" role="img" aria-label="Biểu đồ cân nặng"><polyline pathLength="1" points="${z.map((x,i)=>X(i)+','+Y(x.w)).join(' ')}" fill="none" stroke="var(--ac)" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${z.map((x,i)=>`<circle cx="${X(i)}" cy="${Y(x.w)}" r="4" fill="var(--hot)"><title>${esc(x.d)}: ${x.w} kg</title></circle>`).join('')}<text x="0" y="14" font-size="10" fill="var(--mut)">${mx.toFixed(0)}</text><text x="0" y="108" font-size="10" fill="var(--mut)">${mn.toFixed(0)}</text></svg>`}
+  const df=L.length>1?L[L.length-1].w-L[0].w:0;
+  $('#p-sum').innerHTML=L.length?`<div class="big"><b>${L[L.length-1].w} kg</b>cân nặng gần nhất</div><div class="big"><b>${df>0?'+':''}${df.toFixed(1)} kg</b>so với lần đầu</div>`:'';
+  $('#wlist').innerHTML=[...L].reverse().map(x=>`<li><span>${esc(x.d)}</span><b>${x.w} kg</b><button class="x2" data-dl="${x.id}" aria-label="Xóa lần cân ${esc(x.d)}">×</button></li>`).join('');
+  $$('[data-dl]').forEach(b=>b.onclick=()=>{wlog=wlog.filter(x=>x.id!==+b.dataset.dl);sv('wlog',wlog);drawProg()})}
+$('#wd').value=new Date(Date.now()-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
+$('#wadd').onclick=()=>{const w=+$('#wv').value,d=$('#wd').value;if(!(w>20&&w<300&&d)){$('#wv').focus();return}wlog.push({id:Date.now(),d,w});sv('wlog',wlog);$('#wv').value='';drawProg()};
+
+drawGoals();drawAll();drawWk();drawMl();drawWater();
+drawPlan();drawProg();
+
+// ===== Nâng cấp: ảnh phòng gym, hình nộm cơ, thư viện bài tập, thực phẩm, kiến thức =====
+(()=>{
+const G={chest:'Ngực',shoulders:'Vai',biceps:'Tay trước',triceps:'Tay sau',forearm:'Cẳng tay',abs:'Bụng',traps:'Cơ thang (cổ-vai)',back:'Lưng xô',lowback:'Lưng dưới',glutes:'Mông',quads:'Đùi trước',hams:'Đùi sau',calves:'Bắp chân'};
+const S='100,36,100,50,100,95,';
+// pose: Hx,Hy,Nx,Ny,Px,Py,Ex,Ey,Wx,Wy,Kx,Ky,Fx,Fy
+const E=[
+['Squat',['quads','glutes'],['hams','lowback','abs'],'squat',S+'112,60,104,48,100,122,100,150','84,62,80,75,62,112,95,82,88,72,110,112,100,150',1,'Đặt tạ trên vai, chân rộng bằng vai|Hạ hông ra sau như ngồi ghế, lưng thẳng|Đẩy gót chân đứng lên'],
+['Hip thrust',['glutes'],['hams','abs'],'hip thrust','56,110,70,118,110,128,90,122,110,126,140,104,140,150','56,110,70,118,110,102,90,108,110,100,140,104,140,150',1,'Tựa lưng trên ghế, tạ đặt ở hông|Đẩy hông lên đến khi thân thẳng|Siết mông 1 giây rồi hạ xuống','<rect x="38" y="120" width="42" height="32" rx="4" class="stc"/>'],
+['Nâng bắp chân',['calves'],['hams'],'bắp chân',S+'100,78,100,104,100,122,100,150','100,22,100,36,100,81,100,64,100,90,100,108,100,150',0,'Đứng thẳng, hai chân song song|Nhón gót lên cao hết mức|Hạ xuống chậm trong 2 giây'],
+['Deadlift',['hams','glutes','lowback'],['traps','forearm','quads'],'deadlift',S+'100,80,100,106,100,122,100,150','50,82,62,90,98,98,82,112,100,132,102,124,100,150',1,'Đứng sát thanh tạ, lưng phẳng|Gập hông, kéo tạ sát chân đến khi đứng thẳng|Hạ tạ có kiểm soát'],
+['Chống đẩy',['chest'],['triceps','shoulders','abs'],'đẩy ngực|chống đẩy|push',"158,98,145,104,88,122,147,126,145,146,60,132,30,142",'158,124,145,130,88,136,128,140,145,146,60,142,30,146',0,'Tay rộng hơn vai, thân thẳng như tấm ván|Hạ ngực gần sát sàn|Đẩy mạnh lên, không võng lưng'],
+['Bench press',['chest'],['triceps','shoulders'],'bench','46,98,62,98,112,98,62,76,62,52,150,92,150,148','46,98,62,98,112,98,80,94,62,88,150,92,150,148',1,'Nằm ngửa, bả vai ép xuống ghế|Hạ thanh tạ chạm ngực|Đẩy thẳng lên','<rect x="36" y="104" width="100" height="6" class="stc"/>'],
+['Đẩy vai',['shoulders'],['triceps','traps'],'đẩy vai|shoulder',S+'110,66,102,46,100,122,100,150',S+'100,30,100,10,100,122,100,150',1,'Cầm tạ ngang vai, core siết chặt|Đẩy thẳng lên đỉnh đầu|Hạ về vị trí vai'],
+['Nâng tạ trước',['shoulders'],['chest','traps'],'nâng tạ',S+'102,76,104,100,100,122,100,150',S+'118,64,134,52,100,122,100,150',1,'Tay cầm tạ đơn thả dọc người|Nâng thẳng tay ra trước đến ngang vai|Hạ chậm, không nhún người'],
+['Kéo xà',['back'],['biceps','forearm','traps'],'kéo xà|pull','100,50,100,60,100,100,100,40,100,22,96,126,92,148','100,22,100,34,100,74,112,40,100,22,96,100,92,122',0,'Nắm xà rộng hơn vai, treo người|Kéo ngực lên gần xà, ép bả vai|Hạ xuống chậm đến khi tay thẳng','<line x1="60" y1="20" x2="140" y2="20" class="gnd" style="stroke-width:5"/>'],
+['Kéo cáp ngồi',['back'],['biceps','traps','lowback'],'kéo cáp|row','70,50,70,64,70,118,95,90,120,88,115,112,120,150','66,52,66,66,70,118,60,100,90,92,115,112,120,150',0,'Ngồi thẳng lưng, chân hơi gập|Kéo tay về bụng, ép hai bả vai|Thả ra từ từ','<rect x="50" y="118" width="40" height="8" class="stc"/>'],
+['Cuốn tạ tay trước',['biceps'],['forearm'],'cuốn tạ|curl',S+'102,76,102,102,100,122,100,150',S+'104,76,118,58,100,122,100,150',1,'Khuỷu tay cố định sát thân|Cuốn tạ lên ngang vai|Hạ chậm, không đung đưa'],
+['Tay sau cáp',['triceps'],['forearm','shoulders'],'tay sau',S+'104,76,120,66,100,122,100,150',S+'104,76,104,106,100,122,100,150',0,'Khuỷu tay ép sát hông|Đẩy cáp xuống đến khi tay thẳng|Trả lên đến ngang ngực'],
+['Gập bụng',['abs'],['quads'],'gập bụng','64,134,78,136,118,140,72,126,66,130,140,112,128,142','90,102,96,112,118,140,98,104,92,100,140,112,128,142',0,'Nằm ngửa, gập gối, tay đặt cạnh đầu|Cuộn thân trên lên, siết bụng|Hạ xuống chậm, không kéo cổ'],
+['Nhún vai',['traps'],['forearm','shoulders'],'nhún vai',S+'100,78,100,106,100,122,100,150','100,28,100,42,100,95,100,74,100,102,100,122,100,150',1,'Cầm tạ đơn hai bên người|Nhún vai thẳng lên sát tai|Giữ 1 giây rồi hạ xuống']];
+const SMR='<line x1="100" y1="6" x2="100" y2="150" class="gnd" style="stroke-dasharray:4 4"/>';
+const SM=[
+['Smith squat',['quads','glutes'],['hams','abs'],'smith squat','100,36,100,50,100,95,108,64,100,52,106,122,110,150','100,62,98,76,78,112,106,84,100,72,116,112,112,150',1,'Chỉnh thanh ngang vai, chốt an toàn thấp hơn điểm hạ thấp nhất|Đặt chân hơi lệch ra trước thanh, xoay thanh để mở khóa|Hạ hông xuống, lưng thẳng, rồi đẩy gót lên',SMR],
+['Smith bench press',['chest'],['triceps','shoulders'],'smith bench','46,98,62,98,112,98,62,76,62,52,150,92,150,148','46,98,62,98,112,98,80,94,62,88,150,92,150,148',1,'Đặt ghế sao cho thanh ngang ngực, đặt chốt an toàn|Xoay thanh để mở khóa, hạ chạm ngực|Đẩy lên thẳng tay rồi xoay khóa lại khi xong','<rect x="36" y="104" width="100" height="6" class="stc"/><line x1="62" y1="20" x2="62" y2="104" class="gnd" style="stroke-dasharray:4 4"/>'],
+['Smith đẩy vai ngồi',['shoulders'],['triceps','traps'],'smith đẩy vai|smith shoulder','100,40,100,56,100,108,112,72,100,58,130,108,130,150','100,20,100,36,100,108,100,34,100,14,130,108,130,150',1,'Ngồi sát ghế, thanh ngang cằm|Đẩy thẳng lên đến khi tay gần duỗi|Hạ chậm về ngang cằm','<rect x="84" y="108" width="34" height="6" class="stc"/>'+SMR],
+['Smith Romanian deadlift',['hams','glutes'],['lowback','forearm'],'smith romanian|smith rdl','100,36,100,50,100,95,100,80,100,106,100,122,100,150','50,82,62,90,98,98,84,108,100,128,102,124,100,150',1,'Đứng sát thanh, gối hơi gập|Đẩy hông ra sau, thanh trượt sát đùi|Đứng lên bằng cách đẩy hông ra trước',SMR],
+['Smith hip thrust',['glutes'],['hams','abs'],'smith hip','56,110,70,118,110,128,90,122,110,126,140,104,140,150','56,110,70,118,110,102,90,108,110,100,140,104,140,150',1,'Tựa lưng trên ghế, thanh nằm ngang hông (dùng đệm)|Đẩy hông lên đến khi thân thẳng|Siết mông 1 giây rồi hạ xuống','<rect x="38" y="120" width="42" height="32" rx="4" class="stc"/><line x1="110" y1="60" x2="110" y2="150" class="gnd" style="stroke-dasharray:4 4"/>'],
+['Smith nhún vai',['traps'],['forearm','shoulders'],'smith nhún|smith shrug','100,36,100,50,100,95,100,78,100,106,100,122,100,150','100,28,100,42,100,95,100,74,100,102,100,122,100,150',1,'Đứng thẳng, cầm thanh ngang đùi|Nhún vai thẳng lên sát tai|Giữ 1 giây rồi hạ xuống',SMR],
+['Smith nâng bắp chân',['calves'],['hams'],'smith bắp chân|smith calf','100,36,100,50,100,95,108,64,100,52,100,122,100,150','100,22,100,36,100,81,108,50,100,38,100,108,100,150',1,'Vác thanh trên vai, đứng mũi chân trên bục thấp|Nhón gót lên cao hết mức|Hạ gót xuống chậm, cảm nhận căng bắp chân',SMR],
+['Smith row cúi người',['back'],['biceps','lowback','traps'],'smith row|smith kéo','50,82,62,90,98,98,84,108,100,128,102,124,100,150','50,82,62,90,98,98,82,96,100,100,102,124,100,150',1,'Gập hông, lưng phẳng, tay thẳng nắm thanh|Kéo thanh về bụng dưới, ép bả vai|Hạ chậm, giữ lưng không tròn',SMR]];
+const BX='<rect x="36" y="104" width="100" height="6" class="stc"/>',HX='<rect x="38" y="120" width="42" height="32" rx="4" class="stc"/>',RL='<line x1="100" y1="6" x2="100" y2="150" class="gnd" style="stroke-dasharray:4 4"/>';
+const BPA='46,98,62,98,112,98,62,76,62,52,150,92,150,148',BPB='46,98,62,98,112,98,80,94,62,88,150,92,150,148',PRA=S+'110,66,102,46,100,122,100,150',PRB=S+'100,30,100,10,100,122,100,150',CUA=S+'102,76,102,102,100,122,100,150',CUB=S+'104,76,118,58,100,122,100,150',SHA=S+'100,78,100,106,100,122,100,150',SHB='100,28,100,42,100,95,100,74,100,102,100,122,100,150',CBA=S+'108,64,100,52,100,122,100,150',CBB='100,22,100,36,100,81,108,50,100,38,100,108,100,150',RWA='50,82,62,90,98,98,84,108,100,128,102,124,100,150',RWB='50,82,62,90,98,98,82,96,100,100,102,124,100,150',DLA=S+'100,80,100,106,100,122,100,150',DLB='50,82,62,90,98,98,82,112,100,132,102,124,100,150',GMA=S+'108,64,100,52,100,122,100,150',GMB='52,70,64,78,104,98,86,86,80,72,104,124,100,150',HTA='56,110,70,118,110,128,90,122,110,126,140,104,140,150',HTB='56,110,70,118,110,102,90,108,110,100,140,104,140,150',CRA='64,134,78,136,118,140,72,126,66,130,140,112,128,142',CRB='90,102,96,112,118,140,98,104,92,100,140,112,128,142',WRA=S+'104,78,122,90,100,122,100,150',WRB=S+'104,78,122,68,100,122,100,150';
+const NW=[
+['Đẩy ngực tạ đơn',['chest'],['triceps','shoulders'],'đẩy ngực tạ đơn|dumbbell press',BPA,BPB,1,'Nằm ngửa, mỗi tay một tạ đơn trên ngực|Hạ hai tạ xuống hai bên ngực, khuỷu hơi chếch|Đẩy lên, hai tạ gần chạm nhau',BX],
+['Goblet squat',['quads','glutes'],['abs'],'goblet',S+'108,66,106,56,100,122,100,150','88,62,84,76,66,112,98,84,100,76,112,112,100,150',1,'Ôm một tạ đơn trước ngực|Hạ hông xuống, lưng thẳng, gối theo hướng mũi chân|Đẩy gót chân đứng lên'],
+['Romanian deadlift tạ đơn',['hams','glutes'],['lowback','forearm'],'romanian deadlift tạ đơn',DLA,DLB,1,'Cầm hai tạ đơn trước đùi, gối hơi gập|Đẩy hông ra sau, tạ trượt sát chân|Siết mông để đứng thẳng lại'],
+['Hip thrust tạ đơn',['glutes'],['hams','abs'],'hip thrust tạ đơn',HTA,HTB,1,'Tựa lưng trên ghế, đặt tạ đơn ở hông|Đẩy hông lên đến khi thân thẳng|Siết mông 1 giây rồi hạ xuống',HX],
+['Tay sau tạ đơn đá sau',['triceps'],['shoulders'],'đá sau|kickback','66,74,76,80,110,100,92,92,92,118,112,125,112,150','66,74,76,80,110,100,92,92,124,94,112,125,112,150',1,'Cúi người, khuỷu tay sát thân, tạ buông xuống|Duỗi thẳng tay ra sau, giữ khuỷu cố định|Gập lại chậm'],
+['Cuốn cổ tay tạ đơn',['forearm'],['biceps'],'cổ tay tạ đơn',WRA,WRB,1,'Đứng thẳng, cẳng tay cố định, lòng bàn tay hướng lên|Cuốn cổ tay lên|Hạ xuống chậm'],
+['Kéo tạ đơn một tay',['back'],['biceps','traps'],'một tay|one-arm|single arm','60,78,72,84,112,100,88,108,88,130,116,126,116,150','60,78,72,84,112,100,104,92,90,100,116,126,116,150',1,'Chống một tay lên ghế, lưng phẳng|Kéo tạ về hông, ép bả vai|Hạ tay chậm đến khi duỗi'],
+['Gập bụng cầm tạ đơn',['abs'],['quads'],'bụng cầm tạ|bụng tạ đơn',CRA,CRB,1,'Nằm ngửa, gập gối, ôm tạ đơn trước ngực|Cuộn thân trên lên, siết bụng|Hạ xuống chậm'],
+['Đẩy vai tạ đòn',['shoulders'],['triceps','traps'],'đẩy vai tạ đòn|overhead press|military',PRA,PRB,1,'Thanh tạ đặt ngang vai, siết core|Đẩy thẳng lên trên đầu|Hạ về vị trí vai'],
+['Cuốn tạ đòn',['biceps'],['forearm'],'cuốn tạ đòn|barbell curl',CUA,CUB,1,'Nắm thanh rộng bằng vai, khuỷu sát thân|Cuốn thanh lên ngang vai|Hạ chậm, không đung đưa'],
+['Skull crusher tạ đòn',['triceps'],['shoulders'],'skull|tay sau nằm',BPA.replace('62,76,62,52','62,74,62,52'),BPA.replace('62,76,62,52','62,74,42,84'),1,'Nằm ngửa, thanh tạ giơ thẳng trên ngực|Gập khuỷu hạ thanh về phía trán|Duỗi tay lên lại',BX],
+['Row cúi người tạ đòn',['back'],['biceps','lowback','traps'],'row cúi|bent.over|kéo tạ đòn',RWA,RWB,1,'Gập hông, lưng phẳng, nắm thanh tạ|Kéo thanh về bụng dưới|Hạ chậm, giữ lưng không tròn'],
+['Nhún vai tạ đòn',['traps'],['forearm','shoulders'],'nhún vai tạ đòn',SHA,SHB,1,'Cầm thanh tạ ngang đùi|Nhún vai thẳng lên sát tai|Giữ 1 giây rồi hạ xuống'],
+['Nâng bắp chân tạ đòn',['calves'],['hams'],'bắp chân tạ đòn',CBA,CBB,1,'Vác thanh tạ trên vai|Nhón gót lên cao hết mức|Hạ chậm'],
+['Romanian deadlift tạ đòn',['hams','glutes'],['lowback','forearm','traps'],'romanian',DLA,DLB,1,'Đứng thẳng cầm thanh trước đùi|Đẩy hông ra sau, thanh trượt sát chân|Siết mông để đứng lên'],
+['Cuốn cổ tay tạ đòn',['forearm'],['biceps'],'cổ tay tạ đòn',WRA,WRB,1,'Ngồi, đặt cẳng tay lên đùi, nắm thanh ngửa lòng bàn tay|Cuốn cổ tay lên|Hạ chậm'],
+['Good morning tạ đòn',['lowback','hams'],['glutes'],'good morning',GMA,GMB,1,'Vác thanh trên vai, gối hơi gập|Gập hông ra sau, lưng phẳng|Đứng thẳng lại bằng cách đẩy hông ra trước'],
+['Smith cuốn tạ',['biceps'],['forearm'],'smith cuốn|smith curl',CUA,CUB,1,'Đứng sát thanh, khuỷu cố định|Cuốn thanh lên ngang vai|Hạ chậm',RL],
+['Smith đẩy tay sau (close-grip)',['triceps'],['chest','shoulders'],'smith close|smith tay sau',BPA,BPB,1,'Nằm ngửa, nắm thanh hẹp bằng vai|Hạ thanh xuống ngực dưới, khuỷu sát thân|Đẩy lên thẳng tay','<rect x="36" y="104" width="100" height="6" class="stc"/><line x1="62" y1="20" x2="62" y2="104" class="gnd" style="stroke-dasharray:4 4"/>'],
+['Smith good morning',['lowback','hams'],['glutes'],'smith good',GMA,GMB,1,'Vác thanh trên vai, gối hơi gập|Gập hông ra sau, lưng phẳng|Đứng thẳng lại, thanh chạy trên ray',RL]];
+const RN={'Squat':'Squat tạ đòn','Hip thrust':'Hip thrust tạ đòn','Deadlift':'Deadlift tạ đòn','Bench press':'Bench press tạ đòn','Đẩy vai':'Đẩy vai tạ đơn','Cuốn tạ tay trước':'Cuốn tạ đơn tay trước','Nhún vai':'Nhún vai tạ đơn','Nâng bắp chân':'Nâng bắp chân tạ đơn'};
+const DB=['Đẩy ngực tạ đơn','Goblet squat','Romanian deadlift tạ đơn','Hip thrust tạ đơn','Đẩy vai tạ đơn','Nâng tạ trước','Cuốn tạ đơn tay trước','Tay sau tạ đơn đá sau','Cuốn cổ tay tạ đơn','Kéo tạ đơn một tay','Gập bụng cầm tạ đơn','Nhún vai tạ đơn','Nâng bắp chân tạ đơn'],BB=['Squat tạ đòn','Hip thrust tạ đòn','Deadlift tạ đòn','Bench press tạ đòn','Đẩy vai tạ đòn','Cuốn tạ đòn','Skull crusher tạ đòn','Row cúi người tạ đòn','Nhún vai tạ đòn','Nâng bắp chân tạ đòn','Romanian deadlift tạ đòn','Cuốn cổ tay tạ đòn','Good morning tạ đòn'];
+const EQS=[['db','🏋️ Tạ đơn'],['bb','🏗 Tạ đòn'],['sm','⚙️ Máy Smith'],['ot','🤸 Cáp, tự thân']];
+E.push(...SM,...NW);
+const ex=E.map(a=>({n:RN[a[0]]||a[0],m:a[1],s:a[2],k:new RegExp(a[3],'i'),a:a[4],b:a[5],bar:a[6],st:a[7].split('|'),x:a[8]||''}));
+ex.forEach(e=>{e.eq=/^Smith/.test(e.n)?'sm':DB.includes(e.n)?'db':BB.includes(e.n)?'bb':'ot';if(e.n==='Nâng bắp chân tạ đơn')e.bar=1});
+window.EXLIST=ex;window.GROUPS=G;
+const P=s=>s.split(',').map(Number);
+const an=(t,x,y)=>`<animate attributeName="${t}" values="${x};${y};${x}" dur="2s" repeatCount="indefinite" calcMode="spline" keyTimes="0;.5;1" keySplines=".4 0 .6 1;.4 0 .6 1"/>`;
+const ln=(A,B,i,j)=>`<line x1="${A[i]}" y1="${A[i+1]}" x2="${A[j]}" y2="${A[j+1]}">${an('x1',A[i],B[i])+an('y1',A[i+1],B[i+1])+an('x2',A[j],B[j])+an('y2',A[j+1],B[j+1])}</line>`;
+const dot=(A,B,i,r,c)=>`<circle ${c?'class="pl" ':''}r="${r}" cx="${A[i]}" cy="${A[i+1]}">${an('cx',A[i],B[i])+an('cy',A[i+1],B[i+1])}</circle>`;
+const fig=e=>{const A=P(e.a),B=P(e.b);return`<svg viewBox="0 0 200 160" role="img" aria-label="Chuyển động bài ${esc(e.n)}"><line x1="10" y1="152" x2="190" y2="152" class="gnd"/>${e.x}<g class="st">${[[2,4],[2,6],[6,8],[4,10],[10,12]].map(p=>ln(A,B,...p)).join('')}${dot(A,B,0,9)}${e.bar?dot(A,B,8,6,1):''}</g></svg>`};
+const card=(e,i)=>`<article class="xc" style="--i:${i}">${fig(e)}<div><h3>${esc(e.n)}</h3><div>${e.m.map(m=>`<span class="mc">${G[m]}</span>`).join('')}${e.s.map(m=>`<span class="ms">${G[m]}</span>`).join('')}</div><ol>${e.st.map(s=>`<li>${esc(s)}</li>`).join('')}</ol></div></article>`;
+// Hình nộm
+const R=(id,x,y,w,h,r)=>`<rect class="mz" data-m="${id}" x="${x}" y="${y}" width="${w}" height="${h}" rx="${r}" tabindex="0" role="button" aria-label="${G[id]}"/>`,C=(id,x,y,r)=>`<circle class="mz" data-m="${id}" cx="${x}" cy="${y}" r="${r}" tabindex="0" role="button" aria-label="${G[id]}"/>`;
+const base='<circle class="bd" cx="100" cy="26" r="16"/><rect class="bd" x="70" y="46" width="60" height="104" rx="18"/><rect class="bd" x="38" y="54" width="22" height="116" rx="11"/><rect class="bd" x="140" y="54" width="22" height="116" rx="11"/><rect class="bd" x="72" y="150" width="26" height="150" rx="12"/><rect class="bd" x="102" y="150" width="26" height="150" rx="12"/>';
+const front=C('shoulders',58,62,13)+C('shoulders',142,62,13)+R('chest',76,56,48,34,12)+R('biceps',42,78,16,40,8)+R('biceps',142,78,16,40,8)+R('forearm',40,122,16,46,8)+R('forearm',144,122,16,46,8)+R('abs',84,94,32,54,10)+R('quads',72,154,26,84,12)+R('quads',102,154,26,84,12)+R('calves',74,246,22,52,10)+R('calves',104,246,22,52,10);
+const back=R('traps',84,44,32,24,10)+C('shoulders',58,62,13)+C('shoulders',142,62,13)+R('back',74,70,52,40,14)+R('lowback',84,112,32,34,10)+R('triceps',42,78,16,44,8)+R('triceps',142,78,16,44,8)+R('forearm',40,126,16,42,8)+R('forearm',144,126,16,42,8)+R('glutes',72,150,56,34,16)+R('hams',72,188,26,58,12)+R('hams',102,188,26,58,12)+R('calves',74,250,22,48,10)+R('calves',104,250,22,48,10);
+const man=`<svg id="man" viewBox="0 0 410 322" aria-label="Hình nộm các nhóm cơ"><g>${base+front}<text x="100" y="316">Mặt trước</text></g><g transform="translate(210,0)">${base+back}<text x="100" y="316">Mặt sau</text></g></svg>`;
+// Thực phẩm và kiến thức
+const F=[['🍗','Ức gà',165,31,0,3.6],['🥚','Trứng',143,13,1,10],['🐟','Cá hồi',208,20,0,13],['🥩','Bò nạc',170,26,0,7],['🍤','Tôm',99,24,.2,.3],['🧊','Đậu phụ',76,8,2,4.8],['🥛','Sữa chua Hy Lạp',59,10,3.6,.4],['🍚','Cơm trắng',130,2.7,28,.3],['🍠','Khoai lang',86,1.6,20,.1],['🌾','Yến mạch',389,17,66,7],['🍌','Chuối',89,1.1,23,.3],['🍎','Táo',52,.3,14,.2],['🥑','Bơ',160,2,9,15],['🥦','Súp lơ xanh',34,2.8,7,.4],['🥜','Đậu phộng',567,26,16,49]];
+const T=[['Khởi động trước khi tập','Dành 5–10 phút: đạp xe hoặc đi bộ nhanh, sau đó xoay khớp vai, hông, gối và tập nhẹ với mức tạ rất thấp.'],['Giãn cơ sau tập','Giữ mỗi động tác giãn 20–30 giây cho nhóm cơ vừa tập, thở đều, không giãn đến mức đau nhói.'],['Ngủ và phục hồi','Cơ phát triển lúc nghỉ. Ngủ 7–9 tiếng và để một nhóm cơ nghỉ khoảng 48 giờ trước khi tập nặng lại.'],['Cần bao nhiêu đạm?','Người tập thường dùng khoảng 1,6–2,2 g đạm cho mỗi kg cân nặng mỗi ngày khi muốn tăng cơ. Hỏi bác sĩ nếu bạn có bệnh thận hoặc bệnh nền.'],['Chọn phòng gym thế nào?','Đi thử 1 buổi, xem giờ cao điểm có quá đông không, máy móc có đủ và sạch không, huấn luyện viên có hỗ trợ không, và hợp đồng có điều khoản hoàn tiền hay chuyển nhượng không.'],['Khi nào nên dừng tập?','Dừng ngay nếu đau ngực, chóng mặt, khó thở bất thường hoặc đau nhói ở khớp. Hãy đi khám nếu triệu chứng không hết.']];
+const nav=$('nav'),main=$('main');
+[['body','🧍 Cơ thể'],['nutri','🥦 Thực phẩm'],['tips','💡 Kiến thức']].forEach(([id,l])=>{const b=document.createElement('button');b.setAttribute('role','tab');b.setAttribute('aria-selected','false');b.dataset.tab=id;b.textContent=l;b.onclick=()=>tab(id);nav.appendChild(b)});
+main.insertAdjacentHTML('beforeend',`<section id="body" hidden><div class="bodyw"><div class="pnl"><h2>Bấm vào nhóm cơ</h2><div class="goals" id="eqb" role="group" aria-label="Chọn dụng cụ" style="margin:6px 0 10px"></div><p class="mut" style="margin:0 0 8px">Chọn một bộ phận trên hình nộm để xem các bài tập và chuyển động mẫu.</p>${man}<div class="goals" id="gb"></div></div><div><h2 id="xt" style="font-size:32px;margin-bottom:10px"></h2><div id="exl"></div></div></div></section>
+<section id="nutri" hidden><div class="row top" style="margin-top:22px"><div style="flex:1"><label for="fq">Tìm thực phẩm</label><input id="fq" type="search" placeholder="Ví dụ: gà"></div></div><p class="mut">Giá trị trên 100g, số liệu tham khảo.</p><div class="fg" id="fg"></div></section>
+<section id="tips" hidden><div style="margin-top:22px">${T.map(t=>`<details><summary>${t[0]}</summary><p>${t[1]}</p></details>`).join('')}</div></section>`);
+let sel='chest',EQ='db';
+function pick(m){sel=m;$$('.mz').forEach(z=>z.classList.toggle('on',z.dataset.m===m));$$('#gb button').forEach(b=>b.setAttribute('aria-pressed',b.dataset.m===m));$('#xt').textContent='Nhóm cơ: '+G[m];const A=[...ex.filter(e=>e.m.includes(m)),...ex.filter(e=>!e.m.includes(m)&&e.s.includes(m))];
+$('#eqb').innerHTML=EQS.map(([k,l])=>`<button data-eq="${k}" aria-pressed="${k===EQ}">${l} (${A.filter(e=>e.eq===k).length})</button>`).join('');
+$$('#eqb button').forEach(b=>b.onclick=()=>{EQ=b.dataset.eq;pick(sel)});
+const L=A.filter(e=>e.eq===EQ);$('#exl').innerHTML=L.length?L.map(card).join(''):'<p class="empty">Chưa có bài cho nhóm cơ này với dụng cụ đã chọn. Hãy thử dụng cụ khác.</p>'}
+$('#gb').innerHTML=Object.entries(G).map(([k,v])=>`<button data-m="${k}" aria-pressed="false">${v}</button>`).join('');
+$$('#gb button').forEach(b=>b.onclick=()=>pick(b.dataset.m));
+$$('.mz').forEach(z=>{z.onclick=()=>pick(z.dataset.m);z.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();pick(z.dataset.m)}}});
+const drawF=()=>{const q=$('#fq').value.trim().toLowerCase();$('#fg').innerHTML=F.filter(f=>f[1].toLowerCase().includes(q)).map((f,i)=>`<div class="fd" style="--i:${Math.min(i,8)}"><i aria-hidden="true">${f[0]}</i><h3>${f[1]}</h3><div class="chips" style="justify-content:center;flex-wrap:wrap"><span>🔥 ${f[2]} kcal</span><span>🥩 ${f[3]}g đạm</span></div><div class="mut">Tinh bột ${f[4]}g · Béo ${f[5]}g</div></div>`).join('')};
+$('#fq').oninput=drawF;drawF();pick(sel);
+// Ảnh phòng gym
+const scene=g=>{const t=g.t.join(),W='rgba(255,255,255,.5)',D='rgba(0,0,0,.28)';let s=`<rect x="0" y="100" width="300" height="30" fill="${D}"/><rect x="196" y="14" width="76" height="48" rx="4" fill="${W}" opacity=".6"/><circle cx="234" cy="38" r="10" fill="#fff" opacity=".8"/><rect x="26" y="74" width="8" height="32" fill="${D}"/><rect x="118" y="74" width="8" height="32" fill="${D}"/><rect x="20" y="88" width="112" height="5" fill="${D}"/><rect x="150" y="76" width="90" height="4" fill="${D}"/>`+[158,182,206,230].map(x=>`<circle cx="${x}" cy="68" r="7" fill="${D}"/>`).join('');
+if(/Hồ bơi/.test(t))s+=`<rect x="0" y="104" width="300" height="26" fill="#7fdcea" opacity=".55"/><path d="M0 112q15-8 30 0t30 0 30 0 30 0 30 0 30 0 30 0 30 0 30 0 30 0" stroke="#fff" fill="none" stroke-width="3"/>`;
+if(/Boxing/.test(t))s+=`<line x1="264" y1="0" x2="264" y2="24" stroke="${D}" stroke-width="3"/><rect x="252" y="24" width="24" height="60" rx="11" fill="${D}"/>`;
+if(/Yoga/.test(t))s+=`<ellipse cx="150" cy="112" rx="50" ry="6" fill="${W}"/><circle cx="150" cy="96" r="7" fill="${W}"/>`;
+if(/cardio/.test(t))s+=`<polygon points="230,104 270,104 262,96 224,96" fill="${D}"/><rect x="262" y="60" width="5" height="38" fill="${D}"/>`;
+return`<svg viewBox="0 0 300 130" preserveAspectRatio="xMidYMid slice" aria-hidden="true">${s}</svg>`};
+const oG=drawGyms;drawGyms=function(){oG();$$('#gymList .card').forEach(c=>{const b=c.querySelector('[data-f]');if(b)c.querySelector('.ban').insertAdjacentHTML('afterbegin',scene(gyms[b.dataset.f]))})};
+['q','dist','maxp','sort'].forEach(i=>$('#'+i).oninput=drawGyms);drawGyms();
+// Nhóm cơ trong tab Bài tập
+const oW=drawWk;drawWk=function(){oW();$$('#wk li').forEach(li=>{const e=[...ex].sort((a,b)=>b.k.source.length-a.k.source.length).find(e=>e.k.test(li.textContent));if(e)li.insertAdjacentHTML('beforeend',` <span class="ms">${e.m.map(m=>G[m]).join(', ')}</span>`)})};drawWk();
+})();
+
+// ===== Ảnh bìa riêng: thêm img:"images/ten-anh.jpg" vào phòng gym để hiện ảnh thật =====
+const oG2=drawGyms;drawGyms=function(){oG2();
+  $$("#gymList .card").forEach(c=>{const b=c.querySelector("[data-f]");if(!b)return;const g=gyms[b.dataset.f];
+    if(g.img)c.querySelector(".ban").insertAdjacentHTML("afterbegin",`<img class="ph" src="${esc(g.img)}" alt="Hình ảnh ${esc(g.n)}" loading="lazy">`)})};
+drawGyms();
+
+// ===== Phòng gym thật quanh Hà Nội (nguồn: báo chí và mytour.vn, cần gọi xác nhận lại) =====
+const REAL=[
+{n:"AuFit Gym & Kickfit",a:"446 Bạch Đằng, Hoàn Kiếm",d:"Hoàn Kiếm",p:0,r:4.0,h:"Gọi 0979 141 710 để hỏi giờ",t:["Boxing","Muay Thai","Tắm nóng lạnh","Xông hơi","Gửi xe"]},
+{n:"CLB Thể hình Adam&Eva",a:"140 Hoàng Sâm, Cầu Giấy",d:"Cầu Giấy",p:250000,r:4.0,h:"Chưa cập nhật",t:["Giá rẻ","Tạ tự do","Giá ưu đãi"]},
+{n:"Elite Fitness Lý Thường Kiệt",a:"Lý Thường Kiệt, Hoàn Kiếm",d:"Hoàn Kiếm",p:0,r:4.0,h:"Chưa cập nhật",t:["Tạ tự do","Máy cardio","PT riêng","Yoga"]}];
+if(!ld("realadded",false)){REAL.forEach(r=>{if(!gyms.some(g=>g.n===r.n))gyms.push(r)});sv("gyms",gyms);sv("realadded",true);drawAll()}
+const oG3=drawGyms;drawGyms=function(){oG3();
+  $$("#gymList .card").forEach(c=>{const b=c.querySelector("[data-f]");if(!b)return;const g=gyms[b.dataset.f],r=c.querySelector(".row");
+    if(r&&!r.querySelector(".gi"))r.insertAdjacentHTML("beforeend",`<a class="btn gi" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(g.n+" "+g.a+" hình ảnh phòng tập")}">🖼 Hình ảnh</a>`)});
+  if(!$("#gnote")){$("#gymList").insertAdjacentHTML("beforebegin",'<p class="mut" id="gnote">Lưu ý: năm 2026 nhiều chuỗi gym lớn ở Hà Nội đã đóng cửa hoặc tạm dừng (ví dụ California Fitness). Hãy gọi xác nhận phòng còn hoạt động và hỏi giá trước khi đóng tiền. Mục “Liên hệ báo giá” là chưa có giá công khai.</p>')}};
+["q","dist","maxp","sort"].forEach(i=>$("#"+i).oninput=drawGyms);drawGyms();
+
+// ===== Nấu ăn, kiến thức ăn uống, mẹo máy Smith, Hỏi AI =====
+(()=>{
+const R=[
+['Ức gà áp chảo','🍗','Đơn giản','20 phút',330,45,['200g ức gà','1 thìa cà phê dầu ô liu','Muối, tiêu, 2 tép tỏi băm','½ quả chanh'],['Cắt đôi ức gà theo chiều ngang cho mỏng đều, ướp muối, tiêu, tỏi 15 phút','Làm nóng chảo lửa vừa, áp chảo mỗi mặt 4–5 phút đến khi chín hẳn, không còn màu hồng','Nghỉ 3 phút rồi cắt lát, vắt chanh']],
+['Trứng luộc','🥚','Đơn giản','10 phút',140,12,['2 quả trứng','Nước, chút muối'],['Cho trứng vào nước sôi','Luộc 6–7 phút cho lòng đào, hoặc 9–10 phút cho chín kỹ','Ngâm nước lạnh 2 phút rồi bóc vỏ']],
+['Yến mạch qua đêm','🥣','Đơn giản','5 phút + ủ 6 giờ',380,22,['50g yến mạch','150ml sữa','100g sữa chua Hy Lạp','1 thìa cà phê mật ong, trái cây tùy thích'],['Trộn yến mạch, sữa, sữa chua, mật ong trong hộp kín','Để ngăn mát tủ lạnh ít nhất 6 giờ','Thêm trái cây trước khi ăn']],
+['Salad cá ngừ','🥗','Đơn giản','10 phút',280,32,['1 hộp cá ngừ ngâm nước (khoảng 100g cá)','Xà lách, cà chua, dưa leo','1 quả trứng luộc','1 thìa cà phê dầu ô liu, ½ quả chanh'],['Rửa và cắt rau, xếp ra bát','Cho cá ngừ đã ráo nước và trứng luộc cắt đôi lên trên','Trộn dầu ô liu với nước chanh, muối, tiêu rồi rưới lên']],
+['Sinh tố chuối yến mạch','🍌','Đơn giản','5 phút',420,17,['1 quả chuối','200ml sữa','30g yến mạch','1 thìa canh bơ đậu phộng'],['Cho tất cả vào máy xay','Xay 1 phút đến khi mịn','Uống ngay, hợp bữa phụ sau tập']],
+['Cá hồi sốt chanh dây, măng tây','🐟','Cầu kì','35 phút',520,40,['200g phi lê cá hồi','6 cọng măng tây','2 quả chanh dây','1 thìa cà phê mật ong','1 tép tỏi, 1 thìa cà phê dầu ô liu','Muối, tiêu'],['Thấm khô cá, ướp muối tiêu 10 phút','Áp chảo mặt da úp xuống 4 phút đến khi giòn, lật mặt còn lại 2–3 phút rồi nhấc ra','Xào măng tây với tỏi 3 phút','Đun nhỏ lửa ruột chanh dây với mật ong 2 phút làm sốt, rưới lên cá']],
+['Bò bít tết, khoai lang nướng','🥩','Cầu kì','50 phút',680,52,['200g thăn bò','1 củ khoai lang khoảng 150g','10g bơ, 2 tép tỏi đập dập','Hương thảo hoặc thyme, muối, tiêu','Súp lơ xanh luộc'],['Để bò ra khỏi tủ lạnh 30 phút, thấm khô, muối tiêu hai mặt','Nướng khoai lang 200°C khoảng 35–40 phút đến khi mềm','Áp chảo bò chảo nóng 2–3 phút mỗi mặt, cho bơ, tỏi, thảo mộc vào rưới lên thịt','Nghỉ thịt 5 phút trước khi cắt, ăn kèm khoai và súp lơ']],
+['Đùi gà nướng thảo mộc, rau củ','🍖','Cầu kì','60 phút',560,55,['2 đùi gà bỏ da (khoảng 300g thịt)','1 củ cà rốt, 1 củ hành tây, 1 quả ớt chuông','1 thìa canh dầu ô liu','Tỏi, hương thảo, muối, tiêu, ½ quả chanh'],['Ướp gà với dầu, tỏi, thảo mộc, nước chanh ít nhất 30 phút','Xếp gà và rau củ cắt khúc vào khay','Nướng 200°C khoảng 40 phút, giữa chừng lật một lần','Kiểm tra thịt chín hẳn, nước tiết ra trong là được']],
+['Phở gà tự nấu','🍜','Cầu kì','90 phút',480,38,['½ con gà (hoặc 500g cánh và xương gà)','Gừng, 2 củ hành tím nướng','1 sao hồi, 1 thanh quế, 1 thảo quả','150g bánh phở','Hành lá, rau thơm, chanh, ớt'],['Chần gà qua nước sôi, rửa sạch bọt','Nướng gừng và hành cho thơm, cho cùng gia vị vào nồi nước với gà','Ninh nhỏ lửa 60 phút, vớt gà ra xé, nêm muối, chút nước mắm','Trụng bánh phở, xếp gà, chan nước dùng nóng, thêm rau']]];
+const K=[['Đạm, tinh bột, béo cơ bản','Mỗi gam đạm và tinh bột cho khoảng 4 kcal, mỗi gam chất béo cho khoảng 9 kcal. Đạm giúp phục hồi cơ, tinh bột là nguồn năng lượng chính khi tập, chất béo tốt cần cho hormone và hấp thu vitamin.'],['Giảm mỡ cần thâm hụt calo vừa phải','Ăn ít hơn mức duy trì khoảng 300–500 kcal mỗi ngày thường là mức dễ duy trì. Cắt quá mạnh dễ mất cơ, mệt và ăn bù. Bạn có thể dùng tab Tính chỉ số để ra mức calo.'],['Ăn gì trước và sau tập?','Trước tập 1–3 giờ nên ăn bữa có tinh bột và ít chất béo (cơm, khoai, chuối, yến mạch). Sau tập nên có đạm kèm tinh bột trong vài giờ tiếp theo (trứng, sữa chua, cá, gà, cơm).'],['Nguồn đạm tiết kiệm','Trứng, đậu phụ, cá, ức gà, sữa chua Hy Lạp, đậu các loại là những nguồn đạm dễ mua và giá hợp lý.'],['Đọc nhãn dinh dưỡng','Nhìn khẩu phần ghi trên nhãn trước, rồi mới nhìn calo. Nhiều gói nhỏ ghi cho 2–3 khẩu phần. Chú ý đường bổ sung và natri.'],['An toàn khi nấu và bảo quản','Thịt gà cần nấu chín hẳn (lõi khoảng 74°C). Đồ ăn chuẩn bị sẵn nên để ngăn mát và dùng trong khoảng 3–4 ngày, hâm nóng kỹ. Dùng thớt riêng cho thịt sống.']];
+const nav=$('nav'),main=$('main');
+[['cook','👩‍🍳 Nấu ăn'],['ai','🤖 Hỏi AI']].forEach(([id,l])=>{const b=document.createElement('button');b.setAttribute('role','tab');b.setAttribute('aria-selected','false');b.dataset.tab=id;b.textContent=l;b.onclick=()=>tab(id);nav.appendChild(b)});
+main.insertAdjacentHTML('beforeend',`<section id="cook" hidden><div style="margin-top:22px">${K.map(t=>`<details><summary>${esc(t[0])}</summary><p>${esc(t[1])}</p></details>`).join('')}</div><h2 style="font-size:34px;margin:18px 0 8px">Công thức nấu ăn</h2><div class="goals" id="lv" style="margin-top:0"></div><p class="mut">Calo và đạm là số ước tính cho 1 khẩu phần.</p><div id="rl"></div></section>
+<section id="ai" hidden><div class="pnl" style="margin-top:22px"><h2>Hỏi AI về tập luyện và ăn uống</h2><p class="mut" id="ainote"></p><div class="goals" id="aisug" style="margin:10px 0"></div><div id="chat" aria-live="polite"></div><div class="row" style="margin-top:10px"><input id="aiq" placeholder="Ví dụ: Tôi nặng 60kg, muốn tăng cơ nên ăn gì?" aria-label="Câu hỏi của bạn" style="flex:1"><button class="btn p" id="aisend">Gửi</button></div><p class="mut" style="margin-top:8px">AI có thể sai và không thay thế bác sĩ hoặc huấn luyện viên.</p></div></section>`);
+let lv='';
+const dr=()=>{$('#lv').innerHTML=[['','Tất cả'],['Đơn giản','🟢 Đơn giản'],['Cầu kì','🔴 Cầu kì']].map(([k,l])=>`<button data-lv="${k}" aria-pressed="${k===lv}">${l}</button>`).join('');
+  $$('#lv button').forEach(b=>b.onclick=()=>{lv=b.dataset.lv;dr()});
+  $('#rl').innerHTML=R.filter(r=>!lv||r[2]===lv).map((r,i)=>`<details class="rc" style="--i:${Math.min(i,8)}"><summary><span class="re" aria-hidden="true">${r[1]}</span> ${esc(r[0])} <span class="lv ${r[2]==='Cầu kì'?'h':'s'}">${r[2]}</span><span class="mut"> · ⏱ ${r[3]}</span></summary><div class="chips"><span>🔥 ${r[4]} kcal</span><span>🥩 ${r[5]}g đạm</span></div><h4>Nguyên liệu</h4><ul>${r[6].map(x=>`<li>${esc(x)}</li>`).join('')}</ul><h4>Cách làm</h4><ol>${r[7].map(x=>`<li>${esc(x)}</li>`).join('')}</ol></details>`).join('')};dr();
+$('#tips>div').insertAdjacentHTML('beforeend',`<details><summary>Máy Smith: ưu và nhược điểm</summary><p>Thanh tạ chạy trên ray cố định nên dễ giữ thăng bằng, có chốt an toàn, hợp người mới và khi tập một mình. Nhược điểm là đường đi cố định có thể không hợp mọi cơ thể và ít kích hoạt cơ ổn định hơn tạ tự do.</p></details><details><summary>An toàn khi tập máy Smith</summary><ul><li>Luôn đặt chốt an toàn ở độ cao phù hợp trước khi tập.</li><li>Xoay cổ tay để mở khóa thanh, khi xong thì xoay để móc khóa lại.</li><li>Điều chỉnh vị trí chân sao cho khớp gối và hông thoải mái, không bị kéo theo đường thẳng cứng.</li><li>Khởi động và bắt đầu với mức tạ nhẹ.</li></ul></details>`);
+// Hỏi AI
+const sug=['Tôi nên ăn gì để tăng cơ?','Cách tập ngực bằng máy Smith','Công thức bữa sáng nhiều đạm','Tập bao nhiêu buổi một tuần là hợp lý?'];
+const chat=$('#chat');let hist=[];
+$('#ainote').textContent=AI_ENDPOINT?'Hãy hỏi bất kỳ điều gì về bài tập, ăn uống hay cách nấu.':'Chưa kết nối AI. Hiện chỉ tìm trong thư viện bài tập và công thức của trang. Xem hướng dẫn bật AI trong file worker.js.';
+$('#aisug').innerHTML=sug.map(q=>`<button>${esc(q)}</button>`).join('');
+const add=(c,t)=>{const d=document.createElement('div');d.className='msg '+c;d.textContent=t;chat.appendChild(d);d.scrollIntoView({block:'nearest'});return d};
+const local=q=>{const w=q.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(x=>x.length>1),sc=t=>w.reduce((a,x)=>a+(t.includes(x)?1:0),0),G=window.GROUPS||{};
+  const L=[...R.map(r=>[sc((r[0]+' '+r[6].join(' ')).toLowerCase()),`🍳 ${r[0]} (${r[3]}, khoảng ${r[4]} kcal, ${r[5]}g đạm): xem tab Nấu ăn.`]),...(window.EXLIST||[]).map(e=>[sc((e.n+' '+[...e.m,...e.s].map(m=>G[m]).join(' ')).toLowerCase()),`🏋️ ${e.n}: ${e.st.join('; ')}.`])].filter(x=>x[0]>0).sort((a,b)=>b[0]-a[0]).slice(0,3);
+  return L.length?'Mình chưa kết nối AI nên chỉ gợi ý từ thư viện của trang:\n'+L.map(x=>'• '+x[1]).join('\n'):'Mình chưa kết nối AI và không tìm thấy nội dung phù hợp trong thư viện. Hãy thử từ khóa như "squat", "ngực", "ức gà".'};
+async function ask(q){q=q.trim();if(!q)return;add('u',q);$('#aiq').value='';const w=add('a','Đang trả lời…');
+  if(!AI_ENDPOINT){w.textContent=local(q);return}
+  hist.push({role:'user',content:q});hist=hist.slice(-8);
+  try{const r=await fetch(AI_ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:hist})});
+    if(!r.ok)throw 0;const d=await r.json();w.textContent=d.reply||'Xin lỗi, chưa có câu trả lời.';hist.push({role:'assistant',content:w.textContent})}
+  catch(e){hist.pop();w.textContent='Không kết nối được AI lúc này. Bạn thử lại sau nhé.\n\n'+local(q)}}
+$('#aisend').onclick=()=>ask($('#aiq').value);$('#aiq').onkeydown=e=>{if(e.key==='Enter')ask(e.target.value)};
+$$('#aisug button').forEach(b=>b.onclick=()=>ask(b.textContent));
+})();
